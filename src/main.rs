@@ -114,7 +114,6 @@ fn calculate_wf<F: PotFunc>(params: &SimParams, pot: F) -> SimResult {
 
         next /= 1. + (h.powi(2) / 12.) * params.k_sqr(i as f64 * h, &pot);
 
-        // println!("{next}");
         pts.push(next);
     }
 
@@ -163,8 +162,7 @@ fn matching_func<F: PotFunc>(params: &SimParams, pot: F) -> MatchinResult {
         }
     }
 
-    // let r_m = (left.len() - 1) as f64 * h; // Matching point r
-    let right_count = (32. / h) as usize;
+    let right_count = (64. / h) as usize;
     let r_max = h * (left.len() + right_count - 2) as f64;
     let mut right = vec![0., h];
 
@@ -185,20 +183,6 @@ fn matching_func<F: PotFunc>(params: &SimParams, pot: F) -> MatchinResult {
     right.iter_mut().for_each(|v| {
         *v *= norm;
     });
-
-    // if norm < 0. {
-    // right.pop();
-    // right.pop();
-    // right.reverse();
-    // left.append(&mut right);
-
-    //     plot(
-    //         "AAAA",
-    //         [("asd".into(), (0..left.len()).map(|i| i as f64), left)],
-    //     );
-
-    //     panic!();
-    // }
 
     MatchinResult { h, left, right }
 }
@@ -270,7 +254,7 @@ fn equidist(from: f64, to: f64, elems: usize) -> impl Iterator<Item = (f64, f64)
 }
 
 fn main() {
-    let plots = true;
+    let plots = false;
 
     // Task 1
     // Subtask 1 and 2 - above
@@ -342,11 +326,91 @@ fn main() {
         );
     }
 
+    // Subtask 6 and 7
+    if !plots {
+        let energies = (0..=1000).map(|i| i as f64 * 50. * 1e-3);
+        let strengths = [0.1, 0.25, 0.5, 0.66, 1., 2., 4.];
+
+        for l in 0..=3 {
+            let results = strengths
+                .iter()
+                .map(|s| {
+                    energies
+                        .clone()
+                        .map(|e| {
+                            let params = SimParams::new(1., l, e, 1_000, 2.);
+                            let pot = {
+                                let v = task1_pot(1., 1.);
+
+                                move |r| s * v(r)
+                            };
+                            let result = calculate_wf(&params, &pot);
+
+                            (
+                                params.get_phase_shift(&result),
+                                params.get_partial_cross_section(&result),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+
+            plot(
+                &format!("Task 1 - phase shifts per strength, l = {l}"),
+                results.iter().enumerate().map(|(idx, r)| {
+                    (
+                        format!("$\\delta_{l}(E), ~ {:.1} V$", strengths[idx]),
+                        energies.clone(),
+                        r.iter().map(|(a, _)| *a),
+                    )
+                }),
+            );
+
+            plot(
+                &format!("Task 1 - cross sections per strength, l = {l}"),
+                results.iter().enumerate().map(|(idx, r)| {
+                    (
+                        format!("$\\sigma_{l}(E), ~ {:.1} V$", strengths[idx]),
+                        energies.clone(),
+                        r.iter().map(|(_, b)| *b),
+                    )
+                }),
+            );
+        }
+    }
+
     // Subtask 8 and 9
     if plots {
         plot(
-            "Task 1 ",
+            "Task 1 - matching functions",
             (0..=3).map(|l| {
+                let params = SimParams {
+                    l,
+                    e: 0.,
+                    m: 1.,
+                    r_max: 1.,
+                    steps: 10_000,
+                };
+
+                let min_energy =
+                    task1_pot(1., 1.)(0.) + (l * (l + 1)) as f64 / (2. * params.m) + 0.1;
+                let energies = (0..=1000).map(move |i| min_energy - min_energy * i as f64 * 1e-3);
+
+                let mf = {
+                    let pot = task1_pot(1., 1.);
+                    move |e| matching_func(&params.with_e(e), &pot).get_f()
+                };
+
+                (format!("$f_{l}(E)$"), energies.clone(), energies.map(mf))
+            }),
+        );
+    }
+
+    // Subtask 10
+    if plots {
+        plot(
+            "Task 1 - bound states",
+            (0..=3).flat_map(|l| {
                 let params = SimParams {
                     l,
                     e: 0.,
@@ -357,37 +421,44 @@ fn main() {
 
                 let min_energy =
                     task1_pot(1., 1.)(0.) + (l * (l + 1)) as f64 / (2. * params.m) + 0.1;
-                println!("E_{{min}} = {min_energy} for l = {l}");
-                let energies = (0..=1000).map(move |i| min_energy - min_energy * i as f64 * 1e-3);
 
                 let mf = {
                     let pot = task1_pot(1., 1.);
                     move |e| matching_func(&params.with_e(e), &pot).get_f()
                 };
+
                 equidist(min_energy, 0., 4)
-                    .filter_map(|(from, to)| find_root(from, to, &mf))
+                    .filter_map(move |(from, to)| find_root(from, to, &mf))
                     .enumerate()
-                    .for_each(|(i, root)| {
+                    .map(move |(i, root)| {
                         println!("root = {root}");
-                        let params = SimParams::new(1., l, root, 2_000, 16.);
+                        let params = SimParams::new(1., l, root, 4_000, 16.);
+                        let mut wf = matching_func(&params, task1_pot(1., 1.)).into_wf();
                         let d = params.get_h();
 
-                        plot(
-                            &format!("Task 1, l = {l}"),
-                            [(
-                                format!("Bound state {}", i + 1),
-                                (0..=params.steps).map(|i| i as f64 * d),
-                                matching_func(&params, task1_pot(1., 1.)).into_wf(),
-                            )],
-                        );
-                    });
+                        // "Normalize" to maximum of 1
+                        let norm = wf
+                            .iter()
+                            .copied()
+                            .map(f64::abs)
+                            .max_by(|a, b| a.total_cmp(b))
+                            .unwrap();
 
-                (format!("f_{l}(E)"), energies.clone(), energies.map(mf))
+                        wf.iter_mut().for_each(|v| {
+                            *v /= norm;
+                        });
+
+                        (
+                            format!("$\\phi_{{b,{}}}, ~ l = {l}, E = {root:.3} $", i + 1),
+                            (0..=params.steps).map(move |i| i as f64 * d),
+                            wf,
+                        )
+                    })
             }),
         );
     }
 
-    // Task 2
+    // Task 2 - cross sections and phase shifts
     if plots {
         let energies = (0..=1000).map(|i| i as f64 * 1e-3);
         let results = (0..=1)
@@ -397,8 +468,6 @@ fn main() {
                     .map(|e| {
                         let params = SimParams::new(1., l, e, 10_000, 5.5);
                         let result = calculate_wf(&params, &task2_pot());
-
-                        // println!("{}", result.get_g());
 
                         (
                             params.get_phase_shift(&result),
@@ -430,20 +499,79 @@ fn main() {
                 )
             }),
         );
+    }
 
-        println!("Task 2 roots:");
-        for l in 0..=1 {
-            println!("l = {l}");
-            let mf = {
-                let pot = task2_pot();
-                move |e| matching_func(&SimParams::new(1., l, e, 10_000, 5.5), &pot).get_f()
-            };
-            equidist(-3., 0., 4)
-                .filter_map(|(from, to)| find_root(from, to, &mf))
-                .enumerate()
-                .for_each(|(_, root)| {
-                    println!("root = {root}");
-                });
-        }
+    // Task 2 - matching functions
+    if plots {
+        plot(
+            "Task 2 - matching functions",
+            (0..=1).map(|l| {
+                let params = SimParams {
+                    l,
+                    e: 0.,
+                    m: 1.,
+                    r_max: 5.5,
+                    steps: 1_000,
+                };
+
+                let energies = (0..=1000).map(move |i| -3. + 3. * i as f64 * 1e-3);
+
+                let mf = {
+                    let pot = task2_pot();
+                    move |e| matching_func(&params.with_e(e), &pot).get_f()
+                };
+
+                (format!("$f_{l}(E)$"), energies.clone(), energies.map(mf))
+            }),
+        );
+    }
+
+    // Task 2 - bound states
+    if plots {
+        plot(
+            "Task 2 - bound states",
+            (0..=1).flat_map(|l| {
+                let params = SimParams {
+                    l,
+                    e: 0.,
+                    m: 1.,
+                    r_max: 5.5,
+                    steps: 1_000,
+                };
+
+                let mf = {
+                    let pot = task2_pot();
+                    move |e| matching_func(&params.with_e(e), &pot).get_f()
+                };
+
+                equidist(-3., 0., 4)
+                    .filter_map(move |(from, to)| find_root(from, to, &mf))
+                    .enumerate()
+                    .map(move |(i, root)| {
+                        println!("root = {root}");
+                        let params = SimParams::new(1., l, root, 2_000, 5.5);
+                        let mut wf = matching_func(&params, task2_pot()).into_wf();
+                        let d = params.get_h();
+
+                        // "Normalize" to maximum of 1
+                        let norm = wf
+                            .iter()
+                            .copied()
+                            .map(f64::abs)
+                            .max_by(|a, b| a.total_cmp(b))
+                            .unwrap();
+
+                        wf.iter_mut().for_each(|v| {
+                            *v /= norm;
+                        });
+
+                        (
+                            format!("$\\phi_{{b,{}}}, ~ l = {l}, E = {root:.3} $", i + 1),
+                            (0..=params.steps).map(move |i| i as f64 * d),
+                            wf,
+                        )
+                    })
+            }),
+        );
     }
 }
