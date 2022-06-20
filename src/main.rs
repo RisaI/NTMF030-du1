@@ -327,7 +327,7 @@ fn main() {
     }
 
     // Subtask 6 and 7
-    if !plots {
+    if plots {
         let energies = (0..=1000).map(|i| i as f64 * 50. * 1e-3);
         let strengths = [0.1, 0.25, 0.5, 0.66, 1., 2., 4.];
 
