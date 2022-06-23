@@ -38,6 +38,7 @@ Roots were found using a bisection algorithm. For $l = 0$, there were two roots 
 
 The peaks of the bound states are moving into higher radial distance $r$ with increasing $l$. Their energy is also steadily increasing, and it can be inferred that the bound state for $l = 3$ would have a positive energy. This is precisely the resonance we have described earlier.
 
+This directly ties to the _Levinson's theorem_ which states that $\delta_l(0) - \delta_l(\infty) = n_l \pi$, where $n_l$ is the number of bound states for $l$. It can be seen in the very first graph, that the phase shift for $l=3$ loops upward and then back again, then converging to zero in the same modulo segment as the initial point. $l=2$ loops downward twice, as it has two bound states and $l=1,2$ only once.
 
 ---
 
